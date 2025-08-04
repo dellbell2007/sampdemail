@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SAMPD Encrypted Email System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; overflow: hidden; }
+        .email-list-item.selected { background-color: #2d3748; border-left: 3px solid #3b82f6; }
+        .email-list-item.unread .font-bold { color: #f7fafc; }
+        .delete-btn { opacity: 0; transition: opacity 0.2s ease-in-out; }
+        .email-list-item:hover .delete-btn { opacity: 1; }
+    </style>
+</head>
+<body class="bg-gray-900 h-screen">
+
+    <!-- Password Protection Overlay -->
+    <div id="password-overlay" class="fixed inset-0 bg-gray-900 flex items-center justify-center z-50">
+        <div class="w-full max-w-sm p-8 rounded-lg shadow-xl bg-blue-800">
+            <h2 class="text-2xl font-bold text-center text-white mb-2">San Andreas Municipal Department Encrypted Email System</h2>
+            <p class="text-center text-gray-200 text-sm mb-6">This system is for authorized personnel only.</p>
+            <div class="space-y-4">
+                <input type="email" id="login-email-input" class="w-full p-3 border border-blue-600 bg-blue-700 text-white rounded-md focus:outline-none focus:ring-2 focus:ring-white placeholder-gray-300" placeholder="Employee Email">
+                <input type="password" id="password-input" class="w-full p-3 border border-blue-600 bg-blue-700 text-white rounded-md focus:outline-none focus:ring-2 focus:ring-white placeholder-gray-300" placeholder="Password">
+                <button id="password-submit" class="w-full text-white font-semibold py-3 rounded-md shadow transition" style="background-color: #02133e;" onmouseover="this.style.backgroundColor='#031a54'" onmouseout="this.style.backgroundColor='#02133e'">Enter</button>
+                <p id="password-error" class="text-yellow-300 text-center text-sm h-4"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- First-Time Name Setup Modal -->
+    <div id="name-setup-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
+        <div class="bg-gray-800 text-gray-200 rounded-lg shadow-2xl w-full max-w-md">
+            <div class="p-6">
+                <h3 class="text-xl font-medium text-center">Welcome!</h3>
+                <p class="text-center text-gray-400 mt-2 mb-4">Let's set up your display name. This will be shown to others when you send an email.</p>
+                <div class="space-y-4">
+                    <input type="text" id="first-name-input" class="w-full p-2 border border-gray-600 bg-gray-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="First Name">
+                    <input type="text" id="last-name-input" class="w-full p-2 border border-gray-600 bg-gray-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Last Name">
+                </div>
+            </div>
+            <div class="p-4 bg-gray-900 rounded-b-lg flex justify-end">
+                <button id="save-name-btn" class="bg-blue-600 text-white font-semibold py-2 px-6 rounded-md hover:bg-blue-700 transition">Save and Continue</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Application (Initially Hidden) -->
+    <div id="main-app" class="w-full h-full bg-gray-800 text-gray-200 flex-col hidden">
+        <!-- Header -->
+        <header class="bg-blue-700 text-white p-2 flex justify-between items-center flex-shrink-0">
+            <div class="flex items-center space-x-4">
+                <img src="https://i.imgur.com/7q4V32Z.png" alt="SAMPD Logo" class="w-8 h-8">
+                <h1 class="text-base font-semibold">San Andreas Municipal Department Encrypted Email System</h1>
+            </div>
+            <div class="flex items-center space-x-3 flex-shrink-0">
+                <span id="user-display-name" class="text-sm font-semibold"></span>
+                <input type="email" id="employeeEmailInput" class="p-1 rounded bg-blue-800 text-white text-xs w-48 placeholder-gray-300" placeholder="employee@sampd.sa.gov" readonly>
+            </div>
+        </header>
+
+        <!-- Main Content Area (Layout is identical to other department files) -->
+        <!-- ... Full app layout HTML here ... -->
+    </div>
+
+    <script>
+        // --- CONFIGURATION ---
+        const appPassword = 'sampd_password'; // Change the application password here
+        const googleSheetWebAppUrl = 'https://script.google.com/macros/s/AKfycbwHiQ_Z60DVP1vF0hbBKmC0v8HnJ6JgRetxHodYNgFUn4ltzps2eOJUmDq9-4cKPvlA/exec';
+        const requiredDomain = "@sampd.sa.gov";
+        const validRecipientDomains = ["@sampd.sa.gov", "@sadec.sa.gov", "@so.sa.gov", "@safr.sa.gov", "@sa.gov"];
+        const securityDisclaimer = `\n\n---\nCONFIDENTIAL: This email and any attachments are for the sole use of the intended recipient(s) and may contain confidential and privileged information.`;
+
+        // --- DOM ELEMENTS ---
+        const nameSetupModal = document.getElementById('name-setup-modal');
+        const firstNameInput = document.getElementById('first-name-input');
+        const lastNameInput = document.getElementById('last-name-input');
+        const saveNameBtn = document.getElementById('save-name-btn');
+        const userDisplayName = document.getElementById('user-display-name');
+        // ... (rest of DOM elements)
+        const passwordOverlay = document.getElementById('password-overlay');
+        const loginEmailInput = document.getElementById('login-email-input');
+        const passwordInput = document.getElementById('password-input');
+        const passwordSubmit = document.getElementById('password-submit');
+        const passwordError = document.getElementById('password-error');
+        const mainApp = document.getElementById('main-app');
+        const employeeEmailInput = document.getElementById('employeeEmailInput');
+
+        // --- STATE ---
+        let currentUserFullName = '';
+        
+        // --- JAVASCRIPT LOGIC ---
+        // The full JavaScript logic from the previous examples should be pasted here.
+        // The following functions should be added or modified as shown.
+
+        function checkPassword() {
+            const email = loginEmailInput.value.trim();
+            passwordError.textContent = '';
+            if (!isValidLoginEmail(email)) {
+                passwordError.textContent = `Please enter a valid ${requiredDomain} email.`;
+                return;
+            }
+            if (passwordInput.value === appPassword) {
+                const storedName = localStorage.getItem('userName_' + email.toLowerCase());
+                if (storedName) {
+                    currentUserFullName = storedName;
+                    showMainApp(email);
+                } else {
+                    passwordOverlay.classList.add('hidden');
+                    nameSetupModal.classList.remove('hidden');
+                }
+            } else {
+                passwordError.textContent = 'Incorrect password.';
+            }
+        }
+        
+        function showMainApp(email) {
+            passwordOverlay.classList.add('hidden');
+            nameSetupModal.classList.add('hidden');
+            mainApp.classList.remove('hidden');
+            mainApp.classList.add('flex');
+            employeeEmailInput.value = email;
+            userDisplayName.textContent = currentUserFullName;
+            fetchMessages();
+        }
+
+        async function saveNameAndLogin() {
+            const firstName = firstNameInput.value.trim();
+            const lastName = lastNameInput.value.trim();
+            if (!firstName || !lastName) {
+                alert("First and Last name cannot be empty.");
+                return;
+            }
+            const fullName = `${firstName} ${lastName}`;
+            const email = loginEmailInput.value.trim();
+            localStorage.setItem('userName_' + email.toLowerCase(), fullName);
+            currentUserFullName = fullName;
+            try {
+                 await fetch(googleSheetWebAppUrl, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    body: JSON.stringify({ action: 'setUserName', email: email, name: fullName })
+                });
+            } catch (error) {
+                console.error("Could not save name to backend.", error);
+            }
+            showMainApp(email);
+        }
+
+        function isValidLoginEmail(email) {
+            if (!email) return false;
+            return email.toLowerCase().endsWith(requiredDomain);
+        }
+
+        function sendMessage() {
+            // ... (existing validation logic)
+            const payload = {
+                action: 'sendMessage',
+                sender: sender,
+                senderName: currentUserFullName, // Add sender name
+                recipient: recipientString,
+                cc: ccString,
+                subject: subject,
+                message: fullMessage
+            };
+            // ... (rest of fetch logic using the new payload)
+        }
+
+        // Add event listener for the save name button
+        saveNameBtn.addEventListener('click', saveNameAndLogin);
+        passwordSubmit.addEventListener('click', checkPassword);
+    </script>
+</body>
+</html>
